@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Macro Recorder" Height="720" Width="1100">
+        Title="Macro Recorder" Height="760" Width="1200">
     <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -18,6 +18,9 @@
             <Button Content="Stop Recording" Command="{Binding StopRecordingCommand}" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Undo" Command="{Binding UndoCommand}" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Redo" Command="{Binding RedoCommand}" Margin="0,0,8,0" Padding="14,6"/>
+            <Button Content="Playback" Command="{Binding PlaybackCommand}" Margin="0,0,8,0" Padding="14,6"/>
+            <Button Content="Save Macro" Click="SaveMacro_Click" Margin="0,0,8,0" Padding="14,6"/>
+            <Button Content="Load Macro" Click="LoadMacro_Click" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Toggle Relative/Absolute" Command="{Binding ToggleModeCommand}" Padding="14,6"/>
         </StackPanel>
 
@@ -32,24 +35,55 @@
             </StackPanel>
         </Border>
 
-        <DataGrid Grid.Row="2"
-                  ItemsSource="{Binding Actions}"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  GridLinesVisibility="All"
-                  HeadersVisibility="Column">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Action Id" Binding="{Binding ActionId}" Width="2*" />
-                <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="*" />
-                <DataGridTextColumn Header="Offset (ticks)" Binding="{Binding TimeOffsetTicks}" Width="*" />
-                <DataGridTextColumn Header="Duration (ticks)" Binding="{Binding DurationTicks}" Width="*" />
-                <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="2*" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="2*" />
+            </Grid.ColumnDefinitions>
+
+            <DataGrid Grid.Column="0"
+                      ItemsSource="{Binding Actions}"
+                      SelectedItem="{Binding SelectedAction, Mode=TwoWay}"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      GridLinesVisibility="All"
+                      HeadersVisibility="Column">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Action Id" Binding="{Binding ActionId}" Width="2*" />
+                    <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="*" />
+                    <DataGridTextColumn Header="Offset (ticks)" Binding="{Binding TimeOffsetTicks}" Width="*" />
+                    <DataGridTextColumn Header="Duration (ticks)" Binding="{Binding DurationTicks}" Width="*" />
+                    <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="2*" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Column="2" BorderThickness="1" BorderBrush="#DDD" Padding="12" CornerRadius="6">
+                <StackPanel>
+                    <TextBlock Text="Action Inspector" FontWeight="Bold" FontSize="14" Margin="0,0,0,8" />
+                    <TextBlock Text="Select a row, edit values, then apply." Foreground="#666" Margin="0,0,0,12" />
+
+                    <TextBlock Text="Selected Action" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding SelectedAction.Type}" Margin="0,2,0,12" />
+
+                    <TextBlock Text="TimeOffsetTicks" />
+                    <TextBox Text="{Binding EditorOffsetTicks, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,8" />
+
+                    <TextBlock Text="DurationTicks" />
+                    <TextBox Text="{Binding EditorDurationTicks, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,12" />
+
+                    <WrapPanel>
+                        <Button Content="Apply Edits" Command="{Binding ApplyEditCommand}" Margin="0,0,8,8" Padding="12,6" />
+                        <Button Content="Delete" Command="{Binding DeleteSelectedCommand}" Margin="0,0,8,8" Padding="12,6" />
+                        <Button Content="Insert Wait After" Command="{Binding InsertWaitAfterSelectedCommand}" Margin="0,0,8,8" Padding="12,6" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
 
         <TextBlock Grid.Row="3" Margin="0,8,0,0" Foreground="#666" TextWrapping="Wrap">
-            This UI is a direct testing scaffold. It captures global mouse/keyboard hooks, appends actions to the timeline,
-            and exposes default Relative mode plus optional Absolute mode.
+            This UI is a direct testing scaffold. It captures global mouse/keyboard hooks, supports bundled movement recording,
+            and now includes playback, save/load, and a basic action inspector for timeline edits.
         </TextBlock>
     </Grid>
 </Window>

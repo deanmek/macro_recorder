@@ -1,6 +1,6 @@
 # Macro Recorder
 
-This repository now contains a runnable implementation scaffold for a precision-first macro recorder/replayer in C# with a WPF test UI.
+This repository contains a precision-first macro recorder/replayer scaffold in C# with a WPF testing UI.
 
 ## Solution Layout
 
@@ -11,20 +11,25 @@ This repository now contains a runnable implementation scaffold for a precision-
   - `MCR1` binary serializer/deserializer
 - `src/MacroRecorder.Input`
   - Global low-level keyboard/mouse hooks (`SetWindowsHookEx`)
+  - Playback injection service (`SendInput`) for mouse and keyboard actions
   - High-resolution timestamp capture (`Stopwatch.GetTimestamp`)
 - `src/MacroRecorder.App`
-  - WPF UI scaffold for direct functionality testing
-  - Start/Stop recording buttons, Undo/Redo, Relative/Absolute mode toggle
-  - Live action timeline grid for captured events
+  - WPF UI test harness for direct functionality testing
+  - Start/Stop recording, Undo/Redo, Relative/Absolute mode toggle
+  - Playback button for immediate replay testing
+  - Save/Load buttons for `.mcr1` macro files
+  - Action inspector (select, edit offset/duration, delete, insert wait)
 
 ## Current State
 
 - Relative timeline mode is the default.
-- Absolute mode is available via the toggle in the UI.
-- The WPF app is designed as a direct testing harness for recording hooks + timeline operations.
+- Mouse movement is bundled into single timeline entries, split by input boundaries and idle gaps.
+- Recorded macros can be saved/loaded in `MCR1` format.
+- Basic playback for move/click/key actions is wired and testable.
+- Timeline actions can be selected and edited directly in the inspector panel.
 
 ## Next Steps
 
-- Add action inspector editing (double-click to modify action properties)
-- Add macro playback engine
-- Add save/load integration in the WPF UI using `BinaryMacroSerializer`
+- Type-specific action inspector fields (e.g., mouse coordinates, scan code)
+- Preserve full bundled mouse path points for path-accurate playback
+- Expand playback controls (cancel, speed multiplier, loop)
