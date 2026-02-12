@@ -103,6 +103,17 @@ public static class BinaryMacroSerializer
         writer.Write(action.ActionId.ToByteArray());
         writer.Write(action.TimeOffsetTicks);
         writer.Write(action.DurationTicks);
+        writer.Write(action.Metadata.Count);
+        foreach (var (key, value) in action.Metadata)
+        {
+            var keyBytes = Encoding.UTF8.GetBytes(key);
+            writer.Write(keyBytes.Length);
+            writer.Write(keyBytes);
+
+            var valueBytes = Encoding.UTF8.GetBytes(value);
+            writer.Write(valueBytes.Length);
+            writer.Write(valueBytes);
+        }
     }
 
     private static void WritePayload(BinaryWriter writer, MacroAction action)
@@ -148,8 +159,9 @@ public static class BinaryMacroSerializer
         var actionId = new Guid(reader.ReadBytes(16));
         var timeOffset = reader.ReadInt64();
         var duration = reader.ReadInt64();
+        var metadata = ReadMetadata(reader);
 
-        return actionType switch
+        MacroAction action = actionType switch
         {
             ActionType.MouseMove => new MouseMoveAction
             {
@@ -210,5 +222,35 @@ public static class BinaryMacroSerializer
             },
             _ => throw new InvalidDataException($"Unsupported action type code: {(ushort)actionType}")
         };
+
+        return action.WithMetadata(metadata);
+    }
+
+    private static Dictionary<string, string> ReadMetadata(BinaryReader reader)
+    {
+        var metadataCount = reader.ReadInt32();
+        var metadata = new Dictionary<string, string>(metadataCount, StringComparer.Ordinal);
+        for (var i = 0; i < metadataCount; i++)
+        {
+            var key = Encoding.UTF8.GetString(reader.ReadBytes(reader.ReadInt32()));
+            var value = Encoding.UTF8.GetString(reader.ReadBytes(reader.ReadInt32()));
+            metadata[key] = value;
+        }
+
+        return metadata;
+    }
+}
+
+internal static class MacroActionMetadataExtensions
+{
+    internal static T WithMetadata<T>(this T action, IReadOnlyDictionary<string, string> metadata)
+        where T : MacroAction
+    {
+        foreach (var (key, value) in metadata)
+        {
+            action.Metadata[key] = value;
+        }
+
+        return action;
     }
 }

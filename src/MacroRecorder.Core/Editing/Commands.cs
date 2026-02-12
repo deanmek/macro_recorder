@@ -156,3 +156,51 @@ public sealed class MoveActionCommand : IEditCommand
         editor.MoveAction(macro, _actionId, _oldOffset.Value);
     }
 }
+
+public sealed class UpdateActionPayloadCommand : IEditCommand
+{
+    private readonly Guid _actionId;
+    private readonly MacroAction _updatedAction;
+    private MacroAction? _previousAction;
+
+    public UpdateActionPayloadCommand(Guid actionId, MacroAction updatedAction)
+    {
+        _actionId = actionId;
+        _updatedAction = updatedAction;
+    }
+
+    public string Description => $"Update payload for {_actionId}";
+
+    public IReadOnlyList<HistoryDelta> BuildDeltas() =>
+    [
+        new HistoryDelta(_actionId, "Payload", _previousAction?.Type.ToString(), _updatedAction.Type.ToString())
+    ];
+
+    public void Apply(Macro macro)
+    {
+        var index = macro.Actions.FindIndex(x => x.ActionId == _actionId);
+        if (index < 0)
+        {
+            return;
+        }
+
+        _previousAction ??= macro.Actions[index].Clone();
+        macro.Actions[index] = _updatedAction.Clone();
+    }
+
+    public void Undo(Macro macro)
+    {
+        if (_previousAction is null)
+        {
+            return;
+        }
+
+        var index = macro.Actions.FindIndex(x => x.ActionId == _actionId);
+        if (index < 0)
+        {
+            return;
+        }
+
+        macro.Actions[index] = _previousAction.Clone();
+    }
+}
