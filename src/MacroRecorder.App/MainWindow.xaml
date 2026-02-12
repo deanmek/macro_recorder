@@ -4,7 +4,10 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Macro Recorder" Height="760" Width="1200">
+        Title="Macro Recorder" Height="860" Width="1280">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </Window.Resources>
     <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -19,6 +22,7 @@
             <Button Content="Undo" Command="{Binding UndoCommand}" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Redo" Command="{Binding RedoCommand}" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Playback" Command="{Binding PlaybackCommand}" Margin="0,0,8,0" Padding="14,6"/>
+            <Button Content="Stop Playback" Command="{Binding StopPlaybackCommand}" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Save Macro" Click="SaveMacro_Click" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Load Macro" Click="LoadMacro_Click" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Toggle Relative/Absolute" Command="{Binding ToggleModeCommand}" Padding="14,6"/>
@@ -32,6 +36,10 @@
                 <TextBlock Text="{Binding EditModeLabel}" Margin="0,0,14,0" />
                 <TextBlock Text="Actions: " FontWeight="Bold" />
                 <TextBlock Text="{Binding ActionCount}" />
+                <TextBlock Text="  Speed:" FontWeight="Bold" Margin="12,0,0,0"/>
+                <TextBox Width="70" Text="{Binding PlaybackSpeedMultiplier, UpdateSourceTrigger=PropertyChanged}" Margin="4,0,0,0" />
+                <TextBlock Text="  Loops:" FontWeight="Bold" Margin="12,0,0,0"/>
+                <TextBox Width="50" Text="{Binding PlaybackLoopCount, UpdateSourceTrigger=PropertyChanged}" Margin="4,0,0,0" />
             </StackPanel>
         </Border>
 
@@ -71,6 +79,30 @@
 
                     <TextBlock Text="DurationTicks" />
                     <TextBox Text="{Binding EditorDurationTicks, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,12" />
+
+                    <StackPanel Visibility="{Binding IsMouseEditorVisible, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,0,0,10">
+                        <TextBlock Text="Mouse X" />
+                        <TextBox Text="{Binding EditorMouseX, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,6" />
+                        <TextBlock Text="Mouse Y" />
+                        <TextBox Text="{Binding EditorMouseY, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,6" />
+                        <TextBlock Text="Monitor Id" />
+                        <TextBox Text="{Binding EditorMonitorId, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Visibility="{Binding IsMouseButtonEditorVisible, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,0,0,10">
+                        <TextBlock Text="Mouse Button (Left/Right/Middle)" />
+                        <TextBox Text="{Binding EditorMouseButton, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Visibility="{Binding IsKeyEditorVisible, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,0,0,10">
+                        <TextBlock Text="ScanCode" />
+                        <TextBox Text="{Binding EditorScanCode, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Visibility="{Binding IsTextEditorVisible, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,0,0,10">
+                        <TextBlock Text="Text Payload" />
+                        <TextBox Text="{Binding EditorTextPayload, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0" />
+                    </StackPanel>
 
                     <WrapPanel>
                         <Button Content="Apply Edits" Command="{Binding ApplyEditCommand}" Margin="0,0,8,8" Padding="12,6" />
