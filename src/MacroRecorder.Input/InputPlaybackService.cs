@@ -21,7 +21,7 @@ public sealed class InputPlaybackService : IInputPlaybackService
             cancellationToken.ThrowIfCancellationRequested();
 
             await WaitUntilAsync(startTicks, action.TimeOffsetTicks, cancellationToken);
-            Execute(action);
+            await ExecuteAsync(action, cancellationToken);
         }
     }
 
@@ -36,7 +36,6 @@ public sealed class InputPlaybackService : IInputPlaybackService
                 return;
             }
 
-            // Coarse wait then loop for precision.
             var remainingMs = (int)(remainingTicks * 1000 / Stopwatch.Frequency);
             if (remainingMs > 2)
             {
@@ -49,12 +48,12 @@ public sealed class InputPlaybackService : IInputPlaybackService
         }
     }
 
-    private static void Execute(MacroAction action)
+    private static async Task ExecuteAsync(MacroAction action, CancellationToken cancellationToken)
     {
         switch (action)
         {
             case MouseMoveAction move:
-                SendMouseMove(move.X, move.Y);
+                await ReplayMousePathAsync(move, cancellationToken);
                 break;
             case MouseDownAction down:
                 SendMouseButton(down.Button, isDown: true);
@@ -76,6 +75,55 @@ public sealed class InputPlaybackService : IInputPlaybackService
             case TextInputAction:
                 break;
         }
+    }
+
+    private static async Task ReplayMousePathAsync(MouseMoveAction move, CancellationToken cancellationToken)
+    {
+        if (!move.Metadata.TryGetValue("PathPoints", out var serializedPath) || string.IsNullOrWhiteSpace(serializedPath))
+        {
+            SendMouseMove(move.X, move.Y);
+            return;
+        }
+
+        var points = ParsePathPoints(serializedPath);
+        if (points.Count == 0)
+        {
+            SendMouseMove(move.X, move.Y);
+            return;
+        }
+
+        var startTicks = Stopwatch.GetTimestamp();
+        foreach (var point in points)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await WaitUntilAsync(startTicks, point.OffsetTicks, cancellationToken);
+            SendMouseMove(point.X, point.Y);
+        }
+    }
+
+    private static List<PathPoint> ParsePathPoints(string serializedPath)
+    {
+        var points = new List<PathPoint>();
+        foreach (var token in serializedPath.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = token.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length != 3)
+            {
+                continue;
+            }
+
+            if (!long.TryParse(parts[0], out var offsetTicks) ||
+                !int.TryParse(parts[1], out var x) ||
+                !int.TryParse(parts[2], out var y))
+            {
+                continue;
+            }
+
+            points.Add(new PathPoint(offsetTicks, x, y));
+        }
+
+        points.Sort(static (a, b) => a.OffsetTicks.CompareTo(b.OffsetTicks));
+        return points;
     }
 
     private static void SendMouseMove(int x, int y)
@@ -208,4 +256,6 @@ public sealed class InputPlaybackService : IInputPlaybackService
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
+
+    private readonly record struct PathPoint(long OffsetTicks, int X, int Y);
 }

@@ -12,6 +12,7 @@ namespace MacroRecorder.App.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
+    private const string PathPointsMetadataKey = "PathPoints";
     private static readonly long MouseMoveIdleSplitTicks = Stopwatch.Frequency / 8;
 
     private readonly IGlobalInputHookService _inputHookService;
@@ -19,6 +20,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly IInputPlaybackService _inputPlaybackService;
     private readonly List<MousePoint> _pendingMousePoints = new();
 
+    private CancellationTokenSource? _playbackCts;
     private long? _recordingStart;
     private bool _isRecording;
     private bool _isPlaying;
@@ -26,6 +28,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private ActionRow? _selectedAction;
     private string _editorOffsetTicks = "0";
     private string _editorDurationTicks = "0";
+    private string _editorMouseX = "0";
+    private string _editorMouseY = "0";
+    private string _editorMonitorId = "0";
+    private string _editorMouseButton = MouseButton.Left.ToString();
+    private string _editorScanCode = "0";
+    private string _editorTextPayload = string.Empty;
+    private string _playbackSpeedMultiplier = "1.0";
+    private string _playbackLoopCount = "1";
 
     public MainWindowViewModel(IGlobalInputHookService inputHookService, IInputPlaybackService inputPlaybackService)
     {
@@ -39,6 +49,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         RedoCommand = new RelayCommand(Redo, () => Macro.RedoStack.Count > 0);
         ToggleModeCommand = new RelayCommand(ToggleMode);
         PlaybackCommand = new RelayCommand(Playback, () => !IsRecording && !IsPlaying && Macro.Actions.Count > 0);
+        StopPlaybackCommand = new RelayCommand(StopPlayback, () => IsPlaying);
         ApplyEditCommand = new RelayCommand(ApplySelectionEdits, () => SelectedAction is not null && !IsRecording && !IsPlaying);
         DeleteSelectedCommand = new RelayCommand(DeleteSelected, () => SelectedAction is not null && !IsRecording && !IsPlaying);
         InsertWaitAfterSelectedCommand = new RelayCommand(InsertWaitAfterSelected, () => SelectedAction is not null && !IsRecording && !IsPlaying);
@@ -58,6 +69,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public RelayCommand RedoCommand { get; }
     public RelayCommand ToggleModeCommand { get; }
     public RelayCommand PlaybackCommand { get; }
+    public RelayCommand StopPlaybackCommand { get; }
     public RelayCommand ApplyEditCommand { get; }
     public RelayCommand DeleteSelectedCommand { get; }
     public RelayCommand InsertWaitAfterSelectedCommand { get; }
@@ -139,11 +151,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             {
                 EditorOffsetTicks = value.TimeOffsetTicks.ToString();
                 EditorDurationTicks = value.DurationTicks.ToString();
+                LoadTypeSpecificEditorValues(value.ActionId);
             }
 
+            OnPropertyChanged(nameof(IsMouseEditorVisible));
+            OnPropertyChanged(nameof(IsMouseButtonEditorVisible));
+            OnPropertyChanged(nameof(IsKeyEditorVisible));
+            OnPropertyChanged(nameof(IsTextEditorVisible));
             UpdateCommandStates();
         }
     }
+
+    public bool IsMouseEditorVisible => SelectedMacroAction is MouseMoveAction;
+    public bool IsMouseButtonEditorVisible => SelectedMacroAction is MouseDownAction or MouseUpAction or MouseClickAction;
+    public bool IsKeyEditorVisible => SelectedMacroAction is KeyDownAction or KeyUpAction;
+    public bool IsTextEditorVisible => SelectedMacroAction is TextInputAction;
 
     public string EditorOffsetTicks
     {
@@ -175,12 +197,25 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public string EditorMouseX { get => _editorMouseX; set { if (_editorMouseX == value) return; _editorMouseX = value; OnPropertyChanged(); } }
+    public string EditorMouseY { get => _editorMouseY; set { if (_editorMouseY == value) return; _editorMouseY = value; OnPropertyChanged(); } }
+    public string EditorMonitorId { get => _editorMonitorId; set { if (_editorMonitorId == value) return; _editorMonitorId = value; OnPropertyChanged(); } }
+    public string EditorMouseButton { get => _editorMouseButton; set { if (_editorMouseButton == value) return; _editorMouseButton = value; OnPropertyChanged(); } }
+    public string EditorScanCode { get => _editorScanCode; set { if (_editorScanCode == value) return; _editorScanCode = value; OnPropertyChanged(); } }
+    public string EditorTextPayload { get => _editorTextPayload; set { if (_editorTextPayload == value) return; _editorTextPayload = value; OnPropertyChanged(); } }
+    public string PlaybackSpeedMultiplier { get => _playbackSpeedMultiplier; set { if (_playbackSpeedMultiplier == value) return; _playbackSpeedMultiplier = value; OnPropertyChanged(); } }
+    public string PlaybackLoopCount { get => _playbackLoopCount; set { if (_playbackLoopCount == value) return; _playbackLoopCount = value; OnPropertyChanged(); } }
+
     public int ActionCount => Macro.Actions.Count;
+
+    private MacroAction? SelectedMacroAction =>
+        SelectedAction is null ? null : Macro.Actions.FirstOrDefault(x => x.ActionId == SelectedAction.ActionId);
 
     public void Dispose()
     {
         _inputHookService.InputCaptured -= OnInputCaptured;
         _inputHookService.Dispose();
+        _playbackCts?.Dispose();
     }
 
     public void SaveToFile(string path)
@@ -253,13 +288,36 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        if (!double.TryParse(PlaybackSpeedMultiplier, out var speedMultiplier) || speedMultiplier <= 0)
+        {
+            Status = "Invalid playback speed multiplier.";
+            return;
+        }
+
+        if (!int.TryParse(PlaybackLoopCount, out var loopCount) || loopCount <= 0)
+        {
+            Status = "Invalid loop count.";
+            return;
+        }
+
         IsPlaying = true;
-        Status = "Playing...";
+        _playbackCts?.Dispose();
+        _playbackCts = new CancellationTokenSource();
 
         try
         {
-            await _inputPlaybackService.PlaybackAsync(Macro.Actions);
+            for (var i = 0; i < loopCount; i++)
+            {
+                Status = loopCount == 1 ? "Playing..." : $"Playing loop {i + 1}/{loopCount}...";
+                var plannedActions = BuildPlaybackPlan(speedMultiplier);
+                await _inputPlaybackService.PlaybackAsync(plannedActions, _playbackCts.Token);
+            }
+
             Status = "Playback complete.";
+        }
+        catch (OperationCanceledException)
+        {
+            Status = "Playback stopped.";
         }
         catch (Exception ex)
         {
@@ -267,9 +325,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
         finally
         {
+            _playbackCts?.Dispose();
+            _playbackCts = null;
             IsPlaying = false;
         }
     }
+
+    private void StopPlayback() => _playbackCts?.Cancel();
 
     private void ApplySelectionEdits()
     {
@@ -290,11 +352,109 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        var selectedMacroAction = SelectedMacroAction;
+        if (selectedMacroAction is null)
+        {
+            return;
+        }
+
+        var updatedPayloadAction = BuildUpdatedPayloadAction(selectedMacroAction, newOffset, newDuration);
+        if (updatedPayloadAction is null)
+        {
+            return;
+        }
+
         _timelineEditor.ApplyCommand(Macro, new MoveActionCommand(SelectedAction.ActionId, newOffset, EditMode));
         _timelineEditor.ApplyCommand(Macro, new UpdateDurationCommand(SelectedAction.ActionId, newDuration, EditMode));
-
+        _timelineEditor.ApplyCommand(Macro, new UpdateActionPayloadCommand(SelectedAction.ActionId, updatedPayloadAction));
         RefreshRows(selectActionId: SelectedAction.ActionId);
         Status = "Applied action edits.";
+    }
+
+    private MacroAction? BuildUpdatedPayloadAction(MacroAction selectedMacroAction, long newOffset, long newDuration)
+    {
+        var updated = selectedMacroAction.Clone();
+        updated.TimeOffsetTicks = newOffset;
+        updated.DurationTicks = newDuration;
+
+        switch (updated)
+        {
+            case MouseMoveAction move:
+                if (!int.TryParse(EditorMouseX, out var mouseX) || !int.TryParse(EditorMouseY, out var mouseY) || !int.TryParse(EditorMonitorId, out var monitorId))
+                {
+                    Status = "Invalid mouse coordinate or monitor value.";
+                    return null;
+                }
+
+                move.X = mouseX;
+                move.Y = mouseY;
+                move.MonitorId = monitorId;
+                break;
+            case MouseDownAction down:
+                if (!Enum.TryParse<MouseButton>(EditorMouseButton, ignoreCase: true, out var downButton))
+                {
+                    Status = "Invalid mouse button value.";
+                    return null;
+                }
+
+                down.Button = downButton;
+                break;
+            case MouseUpAction up:
+                if (!Enum.TryParse<MouseButton>(EditorMouseButton, ignoreCase: true, out var upButton))
+                {
+                    Status = "Invalid mouse button value.";
+                    return null;
+                }
+
+                up.Button = upButton;
+                break;
+            case MouseClickAction click:
+                if (!Enum.TryParse<MouseButton>(EditorMouseButton, ignoreCase: true, out var clickButton))
+                {
+                    Status = "Invalid mouse button value.";
+                    return null;
+                }
+
+                click.Button = clickButton;
+                break;
+            case KeyDownAction keyDown:
+                if (!int.TryParse(EditorScanCode, out var keyDownScanCode) || keyDownScanCode < 0)
+                {
+                    Status = "Invalid scan code value.";
+                    return null;
+                }
+
+                keyDown.ScanCode = keyDownScanCode;
+                break;
+            case KeyUpAction keyUp:
+                if (!int.TryParse(EditorScanCode, out var keyUpScanCode) || keyUpScanCode < 0)
+                {
+                    Status = "Invalid scan code value.";
+                    return null;
+                }
+
+                keyUp.ScanCode = keyUpScanCode;
+                break;
+            case TextInputAction text:
+                text.Text = EditorTextPayload;
+                break;
+        }
+
+        return updated;
+    }
+
+    private List<MacroAction> BuildPlaybackPlan(double speedMultiplier)
+    {
+        var planned = new List<MacroAction>(Macro.Actions.Count);
+        foreach (var action in Macro.Actions.OrderBy(x => x.TimeOffsetTicks))
+        {
+            var cloned = action.Clone();
+            cloned.TimeOffsetTicks = (long)(cloned.TimeOffsetTicks / speedMultiplier);
+            cloned.DurationTicks = (long)(cloned.DurationTicks / speedMultiplier);
+            planned.Add(cloned);
+        }
+
+        return planned;
     }
 
     private void DeleteSelected()
@@ -394,6 +554,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         action.Metadata["PathPointCount"] = _pendingMousePoints.Count.ToString();
         action.Metadata["PathStart"] = $"{first.X},{first.Y}";
         action.Metadata["PathEnd"] = $"{last.X},{last.Y}";
+        action.Metadata[PathPointsMetadataKey] = string.Join("|", _pendingMousePoints.Select(x => $"{x.TimestampTicks - first.TimestampTicks},{x.X},{x.Y}"));
 
         _timelineEditor.ApplyCommand(Macro, new InsertActionCommand(action, action.TimeOffsetTicks, EditMode));
 
@@ -444,6 +605,42 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         };
     }
 
+    private void LoadTypeSpecificEditorValues(Guid actionId)
+    {
+        var action = Macro.Actions.FirstOrDefault(x => x.ActionId == actionId);
+        if (action is null)
+        {
+            return;
+        }
+
+        switch (action)
+        {
+            case MouseMoveAction move:
+                EditorMouseX = move.X.ToString();
+                EditorMouseY = move.Y.ToString();
+                EditorMonitorId = move.MonitorId.ToString();
+                break;
+            case MouseDownAction down:
+                EditorMouseButton = down.Button.ToString();
+                break;
+            case MouseUpAction up:
+                EditorMouseButton = up.Button.ToString();
+                break;
+            case MouseClickAction click:
+                EditorMouseButton = click.Button.ToString();
+                break;
+            case KeyDownAction keyDown:
+                EditorScanCode = keyDown.ScanCode.ToString();
+                break;
+            case KeyUpAction keyUp:
+                EditorScanCode = keyUp.ScanCode.ToString();
+                break;
+            case TextInputAction text:
+                EditorTextPayload = text.Text;
+                break;
+        }
+    }
+
     private void RefreshRows(Guid? selectActionId = null)
     {
         Actions.Clear();
@@ -472,6 +669,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         UndoCommand.RaiseCanExecuteChanged();
         RedoCommand.RaiseCanExecuteChanged();
         PlaybackCommand.RaiseCanExecuteChanged();
+        StopPlaybackCommand.RaiseCanExecuteChanged();
         ApplyEditCommand.RaiseCanExecuteChanged();
         DeleteSelectedCommand.RaiseCanExecuteChanged();
         InsertWaitAfterSelectedCommand.RaiseCanExecuteChanged();
