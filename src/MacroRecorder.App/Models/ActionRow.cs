@@ -14,7 +14,7 @@ public sealed class ActionRow
     {
         var details = action switch
         {
-            MouseMoveAction mouseMove => BuildMouseMoveDetails(mouseMove),
+            MouseMoveAction mouseMove => $"X={mouseMove.X}, Y={mouseMove.Y}, Monitor={mouseMove.MonitorId}",
             MouseDownAction mouseDown => $"Button={mouseDown.Button}",
             MouseUpAction mouseUp => $"Button={mouseUp.Button}",
             MouseClickAction mouseClick => $"Button={mouseClick.Button}",
@@ -33,18 +33,5 @@ public sealed class ActionRow
             DurationTicks = action.DurationTicks,
             Details = details
         };
-    }
-
-    private static string BuildMouseMoveDetails(MouseMoveAction mouseMove)
-    {
-        var points = mouseMove.Metadata.TryGetValue("PathPointCount", out var pointCount) ? pointCount : "1";
-        var start = mouseMove.Metadata.TryGetValue("PathStart", out var pathStart)
-            ? pathStart
-            : $"{mouseMove.X},{mouseMove.Y}";
-        var end = mouseMove.Metadata.TryGetValue("PathEnd", out var pathEnd)
-            ? pathEnd
-            : $"{mouseMove.X},{mouseMove.Y}";
-
-        return $"Path {start} -> {end} (points={points}, monitor={mouseMove.MonitorId})";
     }
 }

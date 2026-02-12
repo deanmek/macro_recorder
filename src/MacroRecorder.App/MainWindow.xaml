@@ -18,9 +18,6 @@
             <Button Content="Stop Recording" Command="{Binding StopRecordingCommand}" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Undo" Command="{Binding UndoCommand}" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Redo" Command="{Binding RedoCommand}" Margin="0,0,8,0" Padding="14,6"/>
-            <Button Content="Playback" Command="{Binding PlaybackCommand}" Margin="0,0,8,0" Padding="14,6"/>
-            <Button Content="Save Macro" Click="SaveMacro_Click" Margin="0,0,8,0" Padding="14,6"/>
-            <Button Content="Load Macro" Click="LoadMacro_Click" Margin="0,0,8,0" Padding="14,6"/>
             <Button Content="Toggle Relative/Absolute" Command="{Binding ToggleModeCommand}" Padding="14,6"/>
         </StackPanel>
 
